@@ -1,0 +1,161 @@
+{
+  "name": "Morning Executive Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 7 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7AM Trigger (Mon-Fri)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "pending" },
+            { "name": "limit", "value": "10" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-pending-tasks",
+      "name": "Get Pending Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/memory",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "memory_type", "value": "goal" },
+            { "name": "limit", "value": "5" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-active-goals",
+      "name": "Get Active Goals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 460]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build the morning briefing message\nconst tasks = $('Get Pending Tasks').item.json.items || [];\nconst goals = $('Get Active Goals').item.json.items || [];\n\nconst today = new Date().toLocaleDateString('en-US', {\n  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'\n});\n\nlet briefing = `🌅 *Good Morning!*\\n_${today}_\\n\\n`;\n\n// Tasks section\nif (tasks.length > 0) {\n  const urgentTasks = tasks.filter(t => t.priority === 'urgent' || t.priority === 'high');\n  const regularTasks = tasks.filter(t => t.priority !== 'urgent' && t.priority !== 'high');\n  \n  briefing += `✅ *Tasks (${tasks.length} pending)*\\n`;\n  \n  if (urgentTasks.length > 0) {\n    briefing += `🔴 *Urgent/High:*\\n`;\n    urgentTasks.slice(0, 3).forEach(t => {\n      const due = t.due_date ? ` (due: ${new Date(t.due_date).toLocaleDateString()})` : '';\n      briefing += `  • ${t.title}${due}\\n`;\n    });\n  }\n  \n  if (regularTasks.length > 0) {\n    briefing += `⚪ *Other:*\\n`;\n    regularTasks.slice(0, 3).forEach(t => {\n      briefing += `  • ${t.title}\\n`;\n    });\n  }\n  briefing += '\\n';\n} else {\n  briefing += `✅ *Tasks:* No pending tasks. Great job! 🎉\\n\\n`;\n}\n\n// Goals section\nif (goals.length > 0) {\n  briefing += `🎯 *Active Goals*\\n`;\n  goals.slice(0, 3).forEach(g => {\n    briefing += `  • ${g.summary || g.content.substring(0, 80)}\\n`;\n  });\n  briefing += '\\n';\n}\n\nbriefing += `📧 _Email summary: Phase 2 (coming soon)_\\n`;\nbriefing += `📅 _Calendar: Phase 4 (coming soon)_\\n\\n`;\nbriefing += `_Type 'help' for available commands._`;\n\nreturn [{ json: { briefing_text: briefing } }];"
+      },
+      "id": "build-briefing",
+      "name": "Build Briefing Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 380]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.briefing_text }}\",\n    \"preview_url\": false\n  }\n}",
+        "options": {}
+      },
+      "id": "send-whatsapp-briefing",
+      "name": "Send Briefing via WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [940, 380]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/audit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"action\": \"briefing.sent\",\n  \"resource_type\": \"briefing\",\n  \"details\": { \"tasks_count\": {{ $('Get Pending Tasks').item.json.total || 0 }} }\n}",
+        "options": {}
+      },
+      "id": "log-briefing-sent",
+      "name": "Log Briefing Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1160, 380],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Daily 7AM Trigger (Mon-Fri)": {
+      "main": [
+        [
+          { "node": "Get Pending Tasks", "type": "main", "index": 0 },
+          { "node": "Get Active Goals", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Get Pending Tasks": {
+      "main": [
+        [{ "node": "Build Briefing Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Active Goals": {
+      "main": [
+        [{ "node": "Build Briefing Text", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Briefing Text": {
+      "main": [
+        [{ "node": "Send Briefing via WhatsApp", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Briefing via WhatsApp": {
+      "main": [
+        [{ "node": "Log Briefing Sent", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "id": "morning-briefing-v1",
+  "tags": ["briefing", "automation", "phase1"]
+}

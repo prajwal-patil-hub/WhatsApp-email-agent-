@@ -1,0 +1,229 @@
+{
+  "name": "WhatsApp Message Ingestion",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "whatsapp",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "WhatsApp Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Immediately return 200 OK to WhatsApp (required within 5 seconds)\nconst body = $input.item.json;\n$node['Respond OK'].parameters.respondWith = 'json';\nreturn { body, headers: $input.item.headers };"
+      },
+      "id": "extract-payload",
+      "name": "Extract Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={ \"status\": \"ok\" }",
+        "options": {}
+      },
+      "id": "respond-ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [680, 160]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Validate HMAC signature\nconst crypto = require('crypto');\nconst APP_SECRET = $env.WHATSAPP_APP_SECRET;\nconst signature = $input.item.headers['x-hub-signature-256'] || '';\nconst body = JSON.stringify($input.item.json);\nconst expected = 'sha256=' + crypto.createHmac('sha256', APP_SECRET).update(body).digest('hex');\nif (signature !== expected) {\n  throw new Error('Invalid HMAC signature — possible replay attack');\n}\n\n// Extract the actual message from nested WhatsApp payload\nconst payload = $input.item.json;\nconst entry = payload.entry?.[0];\nconst change = entry?.changes?.[0];\nconst value = change?.value;\nconst messages = value?.messages || [];\nconst statuses = value?.statuses || [];\n\nif (messages.length === 0) {\n  // Status update or empty — nothing to process\n  return [];\n}\n\nconst msg = messages[0];\nconst contact = value?.contacts?.[0];\n\nreturn [{\n  json: {\n    wa_message_id: msg.id,\n    from: msg.from,\n    contact_name: contact?.profile?.name || null,\n    type: msg.type,\n    timestamp: msg.timestamp,\n    text: msg.text?.body || null,\n    audio_id: msg.audio?.id || null,\n    audio_mime: msg.audio?.mime_type || null,\n    image_id: msg.image?.id || null,\n    document_id: msg.document?.id || null,\n    document_filename: msg.document?.filename || null,\n  }\n}];"
+      },
+      "id": "parse-and-verify",
+      "name": "Verify & Parse Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 340]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "rules": [
+            {
+              "conditions": {
+                "string": [{ "value1": "={{ $json.type }}", "operation": "equals", "value2": "text" }]
+              },
+              "renameOutput": true,
+              "outputKey": "text"
+            },
+            {
+              "conditions": {
+                "string": [{ "value1": "={{ $json.type }}", "operation": "equals", "value2": "audio" }]
+              },
+              "renameOutput": true,
+              "outputKey": "audio"
+            },
+            {
+              "conditions": {
+                "string": [{ "value1": "={{ $json.type }}", "operation": "equals", "value2": "document" }]
+              },
+              "renameOutput": true,
+              "outputKey": "document"
+            }
+          ]
+        },
+        "fallbackOutput": "none",
+        "options": {}
+      },
+      "id": "route-by-type",
+      "name": "Route by Message Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 340]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/whatsapp/webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "X-Hub-Signature-256", "value": "={{ $('WhatsApp Webhook').item.headers['x-hub-signature-256'] }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": []
+        },
+        "jsonBody": "={{ $('WhatsApp Webhook').item.json }}",
+        "options": { "timeout": 30000 }
+      },
+      "id": "forward-text-to-backend",
+      "name": "Forward Text to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 240]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $json.audio_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" }
+          ]
+        },
+        "options": {}
+      },
+      "id": "get-audio-url",
+      "name": "Get Audio Media URL",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 420]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" }
+          ]
+        },
+        "responseFormat": "file",
+        "options": {}
+      },
+      "id": "download-audio",
+      "name": "Download Audio File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1340, 420]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/whatsapp/voice",
+        "sendHeaders": true,
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            { "name": "phone_number", "value": "={{ $('Verify & Parse Message').item.json.from }}" },
+            { "name": "wa_message_id", "value": "={{ $('Verify & Parse Message').item.json.wa_message_id }}" },
+            { "name": "mime_type", "value": "={{ $('Verify & Parse Message').item.json.audio_mime }}" },
+            { "name": "audio", "value": "={{ $binary.data }}", "parameterType": "formBinaryData" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "forward-voice-to-backend",
+      "name": "Forward Voice to Backend",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1560, 420]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Log error and send fallback message to user\nconsole.error('WhatsApp ingestion error:', $input.item.json);\nreturn $input.item;"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 520],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "WhatsApp Webhook": {
+      "main": [
+        [{ "node": "Extract Payload", "type": "main", "index": 0 }]
+      ]
+    },
+    "Extract Payload": {
+      "main": [
+        [
+          { "node": "Respond OK", "type": "main", "index": 0 },
+          { "node": "Verify & Parse Message", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Verify & Parse Message": {
+      "main": [
+        [{ "node": "Route by Message Type", "type": "main", "index": 0 }]
+      ]
+    },
+    "Route by Message Type": {
+      "main": [
+        [{ "node": "Forward Text to Backend", "type": "main", "index": 0 }],
+        [{ "node": "Get Audio Media URL", "type": "main", "index": 0 }],
+        [{ "node": "Forward Text to Backend", "type": "main", "index": 0 }]
+      ]
+    },
+    "Get Audio Media URL": {
+      "main": [
+        [{ "node": "Download Audio File", "type": "main", "index": 0 }]
+      ]
+    },
+    "Download Audio File": {
+      "main": [
+        [{ "node": "Forward Voice to Backend", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner",
+    "errorWorkflow": "error-handler"
+  },
+  "staticData": null,
+  "pinData": {},
+  "versionId": "1.0.0",
+  "meta": {
+    "templateCredsSetupCompleted": false,
+    "instanceId": "personal-ai-chief-of-staff"
+  },
+  "id": "whatsapp-ingestion-v1",
+  "tags": ["whatsapp", "phase1"]
+}

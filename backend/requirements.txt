@@ -1,0 +1,64 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Personal AI Chief of Staff — Backend Dependencies
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Web framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.20
+
+# Database
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+psycopg2-binary==2.9.10
+
+# Caching / short-term memory
+redis[hiredis]==5.2.1
+
+# Vector database
+qdrant-client==1.12.1
+
+# AI / LLM
+ollama==0.4.4
+
+# Speech recognition (voice notes)
+faster-whisper==1.1.1
+
+# Text-to-speech
+edge-tts==6.1.18
+
+# Settings management
+pydantic==2.10.3
+pydantic-settings==2.7.0
+
+# Security / auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP client (WhatsApp API, web fetching)
+httpx[http2]==0.28.1
+
+# Structured logging
+structlog==24.4.0
+
+# Utilities
+python-dateutil==2.9.0.post0
+pytz==2024.2
+tenacity==9.0.0
+
+# Document processing (Phase 4 - included for structure)
+pypdf==5.1.0
+python-docx==1.1.2
+markdown==3.7
+
+# Code quality (dev)
+pytest==8.3.4
+pytest-asyncio==0.24.0
+pytest-mock==3.14.0
+httpx==0.28.1
+anyio==4.7.0
+flake8==7.1.1
+black==24.10.0
+isort==5.13.2
+mypy==1.13.0
