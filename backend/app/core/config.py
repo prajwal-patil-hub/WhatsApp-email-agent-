@@ -62,11 +62,19 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
-    # ── Optional future integrations ─────────────────────────────────────────
+    # ── Backend public URL (used in OAuth redirects and agent messages) ────────
+    BACKEND_URL: str = "http://localhost:8000"
+
+    # ── Email — Phase 2 ──────────────────────────────────────────────────────
     GMAIL_CLIENT_ID: Optional[str] = None
     GMAIL_CLIENT_SECRET: Optional[str] = None
+    GMAIL_REDIRECT_URI: str = "http://localhost:8000/api/v1/email/auth/gmail/callback"
     OUTLOOK_CLIENT_ID: Optional[str] = None
     OUTLOOK_CLIENT_SECRET: Optional[str] = None
+    OUTLOOK_REDIRECT_URI: str = "http://localhost:8000/api/v1/email/auth/outlook/callback"
+    OUTLOOK_TENANT_ID: str = "common"
+
+    # ── Research Agent (Phase 5) ─────────────────────────────────────────────
     BRAVE_SEARCH_API_KEY: Optional[str] = None
 
     @field_validator("DATABASE_URL")

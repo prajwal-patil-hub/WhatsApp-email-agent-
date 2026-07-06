@@ -47,6 +47,11 @@ python-dateutil==2.9.0.post0
 pytz==2024.2
 tenacity==9.0.0
 
+# Email integration (Phase 2)
+google-auth-oauthlib==1.2.1
+google-api-python-client==2.154.0
+msal==1.31.1
+
 # Document processing (Phase 4 - included for structure)
 pypdf==5.1.0
 python-docx==1.1.2

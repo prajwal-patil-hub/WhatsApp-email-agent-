@@ -16,6 +16,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.agents.email_agent import EmailAgent
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.memory import short_term
@@ -30,17 +31,16 @@ and knowledge for your principal.
 You are communicating via WhatsApp, so keep responses conversational and appropriately brief \
 unless a detailed response is explicitly needed.
 
-Current capabilities (Phase 1):
+Current capabilities:
 - General conversation and Q&A
-- Answering questions about your capabilities
-- Remembering context within this conversation
+- Email management — read inbox, draft replies, send emails (Gmail & Outlook)
+- Remembering context within this conversation and long-term memory
 
 Coming soon:
-- Email management (read, draft, send)
-- Task creation and tracking
-- Calendar scheduling
-- Document search and knowledge base
-- Research reports
+- Task creation and tracking (Phase 3)
+- Calendar scheduling (Phase 4)
+- Document search and knowledge base (Phase 4)
+- Research reports (Phase 5)
 
 Always be helpful, proactive, and professional. If you cannot do something yet, say so clearly \
 and suggest when it will be available."""
@@ -80,6 +80,7 @@ class ExecutiveCoordinator:
     def __init__(self, ollama: OllamaService) -> None:
         self._ollama = ollama
         self._settings = get_settings()
+        self._email_agent = EmailAgent(ollama=ollama)
 
     async def process(
         self,
@@ -98,7 +99,7 @@ class ExecutiveCoordinator:
         response_text: str
 
         if intent in ("email_read", "email_draft", "email_send"):
-            response_text = await self._route_email(intent, message)
+            response_text = await self._route_email(db, user_id, intent, message)
             routed_to = "email_agent"
         elif intent in ("task_create", "task_list", "task_update"):
             response_text = await self._route_task(intent, message)
@@ -200,11 +201,10 @@ class ExecutiveCoordinator:
 
         return response_text, result["model"], result["tokens_used"]
 
-    async def _route_email(self, intent: str, message: str) -> str:
-        return (
-            "📧 *Email management* is coming in Phase 2! I'll be able to read your Gmail and "
-            "Outlook, draft replies, and send emails on your behalf. Stay tuned!"
-        )
+    async def _route_email(
+        self, db: AsyncSession, user_id: uuid.UUID, intent: str, message: str
+    ) -> str:
+        return await self._email_agent.handle_command(db, user_id, intent, message)
 
     async def _route_task(self, intent: str, message: str) -> str:
         return (

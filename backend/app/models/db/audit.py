@@ -2,7 +2,8 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.db.base import Base
@@ -29,7 +30,7 @@ class AuditLog(Base):
     resource_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     resource_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="success", nullable=False)
-    details: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

@@ -2,8 +2,9 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ARRAY, DateTime, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.db.base import Base
@@ -36,7 +37,7 @@ class Task(Base):
     due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     project: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    tags: Mapped[list[str]] = mapped_column(ARRAY(String), default=list, nullable=False)
+    tags: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
     recurrence: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source_channel: Mapped[str | None] = mapped_column(String(50), nullable=True)
     source_message_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -45,7 +46,7 @@ class Task(Base):
     reminder_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

@@ -285,9 +285,9 @@ async def _process_message_with_db(
 
 
 def _track_processed(wa_message_id: str) -> None:
-    global _processed_ids
     _processed_ids.add(wa_message_id)
     if len(_processed_ids) > MAX_PROCESSED_CACHE:
-        # Evict oldest half (simple approach; use Redis sorted set in production)
+        # Evict half in place — rebinding would orphan other references to this set
         items = list(_processed_ids)
-        _processed_ids = set(items[MAX_PROCESSED_CACHE // 2:])
+        _processed_ids.clear()
+        _processed_ids.update(items[MAX_PROCESSED_CACHE // 2:])

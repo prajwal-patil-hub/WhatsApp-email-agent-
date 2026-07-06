@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Index, String
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.db.base import Base
@@ -32,7 +33,7 @@ class Conversation(Base):
     channel: Mapped[str] = mapped_column(String(50), nullable=False, default="whatsapp")
     status: Mapped[str] = mapped_column(String(50), default="active", nullable=False)
     title: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    metadata_: Mapped[dict] = mapped_column("metadata", JSONB, default=dict, nullable=False)
+    metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
     )

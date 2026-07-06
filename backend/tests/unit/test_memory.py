@@ -50,7 +50,7 @@ class TestShortTermMemory:
         mock_redis.setex = mock_setex
 
         with patch("app.memory.short_term._get_redis", return_value=mock_redis), \
-             patch("app.core.config.get_settings") as mock_settings:
+             patch("app.memory.short_term.get_settings") as mock_settings:
             settings = MagicMock()
             settings.REDIS_CONTEXT_MAX_MESSAGES = 4
             settings.REDIS_CONTEXT_TTL = 86400

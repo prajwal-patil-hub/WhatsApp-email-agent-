@@ -75,10 +75,18 @@ class TestIntentClassification:
 
 class TestRoutingStubs:
     @pytest.mark.asyncio
-    async def test_email_route_returns_phase2_message(self, coordinator):
-        response = await coordinator._route_email("email_read", "show emails")
-        assert "Phase 2" in response
-        assert "Email" in response
+    async def test_email_route_delegates_to_email_agent(self, coordinator):
+        from unittest.mock import AsyncMock, patch
+        with patch.object(
+            coordinator._email_agent, "handle_command", new_callable=AsyncMock
+        ) as mock_handle:
+            mock_handle.return_value = "email agent response"
+            import uuid as _uuid
+            response = await coordinator._route_email(
+                None, _uuid.uuid4(), "email_read", "show emails"
+            )
+        assert response == "email agent response"
+        mock_handle.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_task_route_returns_phase3_message(self, coordinator):

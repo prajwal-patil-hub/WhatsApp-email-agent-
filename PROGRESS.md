@@ -1,6 +1,7 @@
 # Project Progress — Personal AI Chief of Staff
 > **Last Updated:** 2026-05-30
-> **Overall Completion:** 14% (Phase 1 of 7 complete)
+> **Overall Completion:** 29% (Phases 1–2 of 7 complete)
+> **Last Updated:** 2026-07-06
 > **Active Branch:** `claude/personal-ai-chief-of-staff-xAqWZ`
 > **Open PR:** https://github.com/prajwal-patil-hub/WhatsApp-email-agent-/pull/1
 
@@ -157,38 +158,47 @@
 
 ---
 
-## ⬜ PHASE 2 — Email Integration
-**Status:** NOT STARTED
-**Estimated Effort:** 2 weeks
-**Prerequisites:** Phase 1 running end-to-end successfully
+## ✅ PHASE 2 — Email Integration
+**Status:** COMPLETE (2026-07-06)
+**Delivered:** Gmail + Outlook OAuth2, EmailAgent (read/draft/send), 6 API routes, encrypted token storage, email monitor workflow, 24 tests
 
 ### Checklist
 #### Gmail Integration
-- [ ] Add Gmail pip packages: `google-auth-oauthlib`, `google-api-python-client`
-- [ ] Create `backend/app/services/gmail.py` — OAuth2 flow, token storage, inbox read, send
-- [ ] Create `backend/app/api/routes/email.py` — OAuth callback, email list, draft, send
-- [ ] Add email OAuth credentials to `users` table (migration `002_email_oauth.py`)
-- [ ] Implement `EmailAgent.get_unread_summary()` — calls Gmail API, summarizes with LLM
-- [ ] Implement `EmailAgent.draft_reply()` — fetches thread, generates reply with context
-- [ ] Implement `EmailAgent.send_email()` — sends via Gmail API
-- [ ] Wire coordinator: `email_read/draft/send` → `EmailAgent` (currently returns stub)
-- [ ] WhatsApp command: "Summarize today's emails" → top 10 unread with AI summary
-- [ ] WhatsApp command: "Draft reply to [name/subject]" → AI-drafted email
-- [ ] WhatsApp command: "Send the draft" → confirmation + send
+- [x] Added pip packages: `google-auth-oauthlib`, `google-api-python-client`, `msal`
+- [x] `backend/app/services/email_provider.py` — abstract EmailProvider interface + EmailMessage/EmailThread dataclasses
+- [x] `backend/app/services/gmail.py` — GmailProvider: OAuth2 credentials + auto-refresh, unread list, thread fetch, MIME send, mark-as-read (sync SDK wrapped in asyncio.to_thread)
+- [x] `backend/app/api/routes/email.py` — /auth/gmail (+callback), /auth/outlook (+callback), /status, /inbox, /send, /disconnect/{provider}
+- [x] Migration `002_email_oauth.py` — dedicated `email_credentials` table (not on users: supports multiple providers per user), unique (user_id, provider)
+- [x] Tokens encrypted at rest with Fernet (key derived SHA256(SECRET_KEY)); transparent refresh + re-persist via `_sync_tokens`
+- [x] `EmailAgent.handle_command()` — read (LLM inbox summary with urgency flags), draft (thread-aware LLM reply), send (LLM command parser extracts recipient/subject/body, validates address)
+- [x] Wired coordinator: `email_read/draft/send` → real EmailAgent; system prompt updated
+- [x] WhatsApp commands work end-to-end: "check my emails", "draft reply to #2", "send email to x@y.com ..."
 
 #### Outlook Integration
-- [ ] Add `msal` package for Microsoft auth
-- [ ] Create `backend/app/services/outlook.py` — OAuth2, inbox, send
-- [ ] Extend `EmailAgent` to support both Gmail and Outlook (provider routing)
+- [x] `msal` package for Microsoft auth
+- [x] `backend/app/services/outlook.py` — OutlookProvider: MSAL refresh-token flow, Graph API inbox/thread/send/mark-read via httpx, HTML→text stripping
+- [x] EmailAgent routes by `email_credentials.provider` — Gmail and Outlook both supported
 
 #### Automation
-- [ ] Create `n8n/workflows/email_monitor.json` — poll Gmail every 5 min, push urgent to WhatsApp
-- [ ] Priority email detection (invoice, urgent, from VIP contacts)
-- [ ] Follow-up reminder: flag emails needing reply after 24h
+- [x] `n8n/workflows/email_monitor.json` — every 5 min: fetch inbox summary → skip if 0 unread → WhatsApp notification → audit log
+- [ ] Priority email detection from VIP contacts (deferred → Phase 7 automations)
+- [ ] Follow-up reminder after 24h (deferred → Phase 7 automations)
 
-#### Tests
-- [ ] `tests/unit/test_email_agent.py`
-- [ ] `tests/integration/test_email_routes.py`
+#### Security
+- [x] OAuth CSRF protection — signed JWT state tokens (`purpose=oauth_state`, provider-bound)
+- [x] All email actions audit-logged (email.read / email.draft / email.send / email.*_connected / email.*_disconnected)
+
+#### Tests (24 new, 70/70 total passing)
+- [x] `tests/unit/test_email_agent.py` — 11 tests: encryption roundtrip, no-credentials message, read empty/full inbox, send validation + success, draft, token sync, provider error handling
+- [x] `tests/integration/test_email_routes.py` — 13 tests: auth required, status, OAuth not-configured 503, auth URL generation, disconnect, inbox 412/200, send 412/200
+
+### Bugs Fixed During Phase 2
+| # | Severity | Location | Bug | Fix |
+|---|---|---|---|---|
+| 7 | **High** | `api/routes/whatsapp.py` | `_track_processed` rebound module global `_processed_ids` to a new set on eviction — other references kept the stale, unbounded set | Mutate in place: `clear()` + `update()` |
+| 8 | **Medium** | `models/db/*.py` | Postgres-only `JSONB`/`ARRAY` column types in ORM broke SQLite test runs (and any non-PG deployment) | Cross-dialect `JSON` in ORM; migrations keep JSONB on Postgres |
+| 9 | **Medium** | `tests/conftest.py` | Session-scoped DB engine leaked committed rows across tests → unique-constraint and multiple-rows failures | Function-scoped in-memory SQLite with StaticPool; autouse env fixture so `get_settings()` always valid |
+| 10 | **Low** | `tests/unit/test_memory.py` | Patched `app.core.config.get_settings` instead of the imported reference in `short_term` — mock never applied | Patch `app.memory.short_term.get_settings` |
 
 ---
 

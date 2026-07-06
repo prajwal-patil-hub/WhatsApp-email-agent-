@@ -7,6 +7,7 @@ from .memory import Memory
 from .task import Task
 from .audit import AuditLog
 from .knowledge import KnowledgeItem
+from .email_credential import EmailCredential
 
 __all__ = [
     "Base",
@@ -18,4 +19,5 @@ __all__ = [
     "Task",
     "AuditLog",
     "KnowledgeItem",
+    "EmailCredential",
 ]

@@ -3,13 +3,15 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, String, Text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.db.conversation import Conversation
+    from app.models.db.email_credential import EmailCredential
     from app.models.db.memory import Memory
     from app.models.db.task import Task
 
@@ -29,7 +31,7 @@ class User(Base):
     email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
     role: Mapped[str] = mapped_column(String(50), default="user", nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    preferences: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     timezone: Mapped[str] = mapped_column(String(50), default="UTC", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=_now, nullable=False
@@ -46,6 +48,9 @@ class User(Base):
     )
     tasks: Mapped[list["Task"]] = relationship(
         "Task", back_populates="user", lazy="noload"
+    )
+    email_credentials: Mapped[list["EmailCredential"]] = relationship(
+        "EmailCredential", back_populates="user", lazy="noload"
     )
 
     def __repr__(self) -> str:

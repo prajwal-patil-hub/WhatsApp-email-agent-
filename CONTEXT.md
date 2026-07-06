@@ -1,6 +1,6 @@
 # Project Context — Personal AI Chief of Staff
 > **Purpose:** Drop this file into any new Claude Code session to resume work with full context.
-> **Last Updated:** 2026-05-30
+> **Last Updated:** 2026-07-06
 > **Session:** claude/personal-ai-chief-of-staff-xAqWZ
 
 ---
@@ -9,7 +9,7 @@
 
 A **locally-hosted, privacy-first Personal AI Executive Assistant** that operates primarily through WhatsApp. The user (Prajwal Patil — prajwalpatil522@gmail.com) communicates via WhatsApp; the AI understands text and voice notes, manages email/tasks/calendar/knowledge, conducts research, and generates briefings. All LLM inference runs locally via Ollama — no data leaves the machine.
 
-This is a **7-phase project**. Phase 1 is fully built and merged. Phases 2–7 are planned with stubs and interfaces already in place.
+This is a **7-phase project**. Phases 1 and 2 are fully built. Phases 3–7 are planned with stubs and interfaces already in place.
 
 ---
 
@@ -68,14 +68,14 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 | Phase | Name | Status | Completion |
 |---|---|---|---|
 | 1 | Core WhatsApp Assistant | ✅ COMPLETE | 100% |
-| 2 | Email Integration | ⏳ NOT STARTED | 0% |
+| 2 | Email Integration | ✅ COMPLETE | 100% |
 | 3 | Task Management | ⏳ NOT STARTED | 0% |
 | 4 | Knowledge Base + Calendar | ⏳ NOT STARTED | 0% |
 | 5 | Research Agent | ⏳ NOT STARTED | 0% |
 | 6 | Admin Dashboard | ⏳ NOT STARTED | 0% |
 | 7 | Advanced Automations | ⏳ NOT STARTED | 0% |
 
-**Overall: 14% complete (Phase 1 of 7 done)**
+**Overall: 29% complete (Phases 1–2 of 7 done)**
 
 ---
 
@@ -96,7 +96,7 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 │   │   ├── main.py                     ← FastAPI app factory + lifespan
 │   │   ├── agents/
 │   │   │   ├── coordinator.py          ← PRIMARY AGENT. Phase 1 complete.
-│   │   │   ├── email_agent.py          ← STUB. Implement in Phase 2.
+│   │   │   ├── email_agent.py          ← Phase 2 COMPLETE. Gmail+Outlook.
 │   │   │   ├── task_agent.py           ← STUB. Implement in Phase 3.
 │   │   │   ├── research_agent.py       ← STUB. Implement in Phase 5.
 │   │   │   ├── knowledge_agent.py      ← STUB. Implement in Phase 4.
@@ -291,27 +291,30 @@ make test-integration         # integration tests only
 
 ---
 
-## 13. What To Build Next (Phase 2)
+## 13. Phase 2 (Email) — COMPLETE. What To Build Next (Phase 3)
 
-**Phase 2 = Email Integration.** The Email Agent stub is at `backend/app/agents/email_agent.py`.
+**Phase 2 shipped (2026-07-06):**
+- `backend/app/services/email_provider.py` — abstract EmailProvider + EmailMessage/EmailThread types
+- `backend/app/services/gmail.py` — GmailProvider (google-api-python-client, sync calls via asyncio.to_thread)
+- `backend/app/services/outlook.py` — OutlookProvider (MSAL token refresh + httpx Graph API)
+- `backend/app/agents/email_agent.py` — full EmailAgent: handle_command(db, user_id, intent, message) → read/draft/send
+- `backend/app/api/routes/email.py` — OAuth flows (/email/auth/gmail, /email/auth/outlook + callbacks), /email/status, /email/inbox, /email/send, /email/disconnect/{provider}
+- `backend/app/models/db/email_credential.py` — email_credentials table; tokens Fernet-encrypted (key = SHA256(SECRET_KEY))
+- `backend/migrations/versions/002_email_oauth.py` — migration
+- `n8n/workflows/email_monitor.json` — every-5-min unread check → WhatsApp notification
+- OAuth CSRF protection via signed JWT state tokens (purpose=oauth_state)
+- Coordinator now routes email_read/email_draft/email_send to the real EmailAgent
+
+**Phase 3 = Task Management.** The Task Agent stub is at `backend/app/agents/task_agent.py`.
 
 Steps to implement:
-1. Add Gmail OAuth2 routes to `backend/app/api/routes/` (new file: `email.py`)
-2. Add email credentials to `users` table (new migration `002_email_oauth.py`)
-3. Implement `EmailAgent.get_unread_summary()` using Google Gmail API
-4. Implement `EmailAgent.draft_reply()` using LLM + email thread context
-5. Implement `EmailAgent.send_email()` via Gmail API
-6. Wire up coordinator routing: `email_read/draft/send` → EmailAgent (currently returns stub message)
-7. Create n8n workflow: `n8n/workflows/email_monitor.json` (poll Gmail every 5 min)
-8. Add Outlook support (Microsoft Graph API)
-9. Tests: `tests/unit/test_email_agent.py`, `tests/integration/test_email_routes.py`
-
-**New pip packages needed:**
-```
-google-auth-oauthlib
-google-api-python-client
-msal  # Microsoft auth
-```
+1. Add task CRUD routes: `backend/app/api/routes/tasks.py` (tasks table already exists in 001 migration)
+2. Implement TaskAgent: create/list/update/complete via natural language (LLM command parser, same pattern as EmailAgent._parse_command)
+3. Wire coordinator routing: task_create/task_list/task_update → TaskAgent
+4. Priority + due-date extraction from natural language
+5. Recurring tasks (recurrence column exists)
+6. n8n workflow: task reminder scheduler (check overdue → WhatsApp nudge)
+7. Tests: tests/unit/test_task_agent.py, tests/integration/test_task_routes.py
 
 ---
 
@@ -350,6 +353,7 @@ git push -u origin claude/personal-ai-chief-of-staff-xAqWZ
 |---|---|
 | 2026-05-29 | Repository created (empty) |
 | 2026-05-30 | Full Phase 1 implemented: 90 files, 6,626 lines. Architecture doc, Docker, FastAPI, all agents (coordinator complete, 5 stubs), 3-layer memory, Whisper STT, n8n workflows, React dashboard, tests. 6 bugs caught + fixed by adversarial review. PR #1 opened. |
+| 2026-07-06 | Phase 2 (Email) implemented: Gmail + Outlook OAuth2, provider abstraction, EmailAgent (read/draft/send via LLM), 6 API routes, encrypted token storage, email_monitor n8n workflow, 24 new tests. Fixed: JSONB/ARRAY → JSON in ORM models (SQLite test compat; Postgres migration unchanged), dedup cache eviction rebinding bug, conftest test isolation (per-test in-memory DB + StaticPool), added client/test_user/auth_headers fixtures. Full suite: 70/70 passing. |
 
 ---
 
