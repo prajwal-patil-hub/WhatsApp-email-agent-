@@ -1,6 +1,6 @@
 # Project Context — Personal AI Chief of Staff
 > **Purpose:** Drop this file into any new Claude Code session to resume work with full context.
-> **Last Updated:** 2026-07-06
+> **Last Updated:** 2026-07-09
 > **Session:** claude/personal-ai-chief-of-staff-xAqWZ
 
 ---
@@ -9,7 +9,7 @@
 
 A **locally-hosted, privacy-first Personal AI Executive Assistant** that operates primarily through WhatsApp. The user (Prajwal Patil — prajwalpatil522@gmail.com) communicates via WhatsApp; the AI understands text and voice notes, manages email/tasks/calendar/knowledge, conducts research, and generates briefings. All LLM inference runs locally via Ollama — no data leaves the machine.
 
-This is a **7-phase project**. Phases 1 and 2 are fully built. Phases 3–7 are planned with stubs and interfaces already in place.
+This is a **7-phase project**. Phases 1–3 are fully built. Phases 4–7 are planned with stubs and interfaces already in place.
 
 ---
 
@@ -69,13 +69,13 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 |---|---|---|---|
 | 1 | Core WhatsApp Assistant | ✅ COMPLETE | 100% |
 | 2 | Email Integration | ✅ COMPLETE | 100% |
-| 3 | Task Management | ⏳ NOT STARTED | 0% |
+| 3 | Task Management | ✅ COMPLETE | 100% |
 | 4 | Knowledge Base + Calendar | ⏳ NOT STARTED | 0% |
 | 5 | Research Agent | ⏳ NOT STARTED | 0% |
 | 6 | Admin Dashboard | ⏳ NOT STARTED | 0% |
 | 7 | Advanced Automations | ⏳ NOT STARTED | 0% |
 
-**Overall: 29% complete (Phases 1–2 of 7 done)**
+**Overall: 43% complete (Phases 1–3 of 7 done)**
 
 ---
 
@@ -97,7 +97,7 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 │   │   ├── agents/
 │   │   │   ├── coordinator.py          ← PRIMARY AGENT. Phase 1 complete.
 │   │   │   ├── email_agent.py          ← Phase 2 COMPLETE. Gmail+Outlook.
-│   │   │   ├── task_agent.py           ← STUB. Implement in Phase 3.
+│   │   │   ├── task_agent.py           ← Phase 3 COMPLETE. NL task mgmt.
 │   │   │   ├── research_agent.py       ← STUB. Implement in Phase 5.
 │   │   │   ├── knowledge_agent.py      ← STUB. Implement in Phase 4.
 │   │   │   └── scheduling_agent.py     ← STUB. Implement in Phase 4.
@@ -291,7 +291,7 @@ make test-integration         # integration tests only
 
 ---
 
-## 13. Phase 2 (Email) — COMPLETE. What To Build Next (Phase 3)
+## 13. Phases 2–3 — COMPLETE. What To Build Next (Phase 4)
 
 **Phase 2 shipped (2026-07-06):**
 - `backend/app/services/email_provider.py` — abstract EmailProvider + EmailMessage/EmailThread types
@@ -305,16 +305,24 @@ make test-integration         # integration tests only
 - OAuth CSRF protection via signed JWT state tokens (purpose=oauth_state)
 - Coordinator now routes email_read/email_draft/email_send to the real EmailAgent
 
-**Phase 3 = Task Management.** The Task Agent stub is at `backend/app/agents/task_agent.py`.
+**Phase 3 shipped (2026-07-09):**
+- `backend/app/agents/task_agent.py` — full TaskAgent: LLM command parser (create/list/complete/update/delete), priority inference, ISO due-date resolution (LLM given current datetime), recurrence engine (daily/weekly/monthly — completing spawns next occurrence), task lookup by list number or title keyword
+- `backend/app/api/routes/tasks.py` — REST CRUD: GET/POST /tasks, GET/PATCH/DELETE /tasks/{id}, POST /tasks/{id}/complete, GET /tasks/overdue?mark_reminded=true (one-shot reminder semantics via reminder_sent_at)
+- `backend/app/models/schemas/task.py` — TaskCreate/TaskUpdate/TaskResponse/TaskListResponse
+- `n8n/workflows/task_reminders.json` — hourly overdue check → WhatsApp nudge
+- Coordinator routes task_create/task_list/task_update → TaskAgent; morning_briefing workflow's GET /tasks call is now functional
+- Response shape {"items": [...], "total": n} matches what morning_briefing.json already expects
+
+**Phase 4 = Knowledge Base + Calendar.** Stubs: `knowledge_agent.py`, `scheduling_agent.py`.
 
 Steps to implement:
-1. Add task CRUD routes: `backend/app/api/routes/tasks.py` (tasks table already exists in 001 migration)
-2. Implement TaskAgent: create/list/update/complete via natural language (LLM command parser, same pattern as EmailAgent._parse_command)
-3. Wire coordinator routing: task_create/task_list/task_update → TaskAgent
-4. Priority + due-date extraction from natural language
-5. Recurring tasks (recurrence column exists)
-6. n8n workflow: task reminder scheduler (check overdue → WhatsApp nudge)
-7. Tests: tests/unit/test_task_agent.py, tests/integration/test_task_routes.py
+1. Qdrant collections init + embedding pipeline (`nomic-embed-text` via Ollama)
+2. Document ingestion: PDF/DOCX/MD chunking (pypdf/python-docx already in requirements) → embeddings → Qdrant; knowledge_items table exists
+3. KnowledgeAgent: knowledge_ingest (from WhatsApp document messages) + knowledge_search (RAG: retrieve → LLM answer with citations)
+4. Wire long_term.search_memories to Qdrant semantic search (currently PostgreSQL ILIKE)
+5. Google Calendar OAuth (reuse email OAuth pattern) + SchedulingAgent: calendar_schedule/calendar_query
+6. Routes: /api/v1/knowledge (upload, search), /api/v1/calendar (events CRUD)
+7. Tests for both agents + routes
 
 ---
 
@@ -354,6 +362,7 @@ git push -u origin claude/personal-ai-chief-of-staff-xAqWZ
 | 2026-05-29 | Repository created (empty) |
 | 2026-05-30 | Full Phase 1 implemented: 90 files, 6,626 lines. Architecture doc, Docker, FastAPI, all agents (coordinator complete, 5 stubs), 3-layer memory, Whisper STT, n8n workflows, React dashboard, tests. 6 bugs caught + fixed by adversarial review. PR #1 opened. |
 | 2026-07-06 | Phase 2 (Email) implemented: Gmail + Outlook OAuth2, provider abstraction, EmailAgent (read/draft/send via LLM), 6 API routes, encrypted token storage, email_monitor n8n workflow, 24 new tests. Fixed: JSONB/ARRAY → JSON in ORM models (SQLite test compat; Postgres migration unchanged), dedup cache eviction rebinding bug, conftest test isolation (per-test in-memory DB + StaticPool), added client/test_user/auth_headers fixtures. Full suite: 70/70 passing. |
+| 2026-07-09 | Phase 3 (Tasks) implemented: TaskAgent with LLM NL parsing (create/list/complete/update/delete), priority + due-date inference, recurrence engine, REST CRUD /api/v1/tasks, overdue-reminder endpoint + hourly n8n nudge workflow, coordinator wiring. 24 new tests. Full suite: 94/94 passing. |
 
 ---
 

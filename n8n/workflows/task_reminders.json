@@ -1,0 +1,101 @@
+{
+  "name": "Task Reminders — Overdue Nudges",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every Hour",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/tasks/overdue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "mark_reminded", "value": "true" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-overdue",
+      "name": "Fetch Overdue Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build nudge message; skip when nothing is overdue\nconst data = $input.item.json;\nconst tasks = data.items || [];\n\nif (tasks.length === 0) {\n  return [];\n}\n\nconst emoji = { urgent: '🔴', high: '🟠', medium: '🟡', low: '🟢' };\nlet msg = `⏰ *Overdue Task${tasks.length > 1 ? 's' : ''} (${tasks.length})*\\n\\n`;\ntasks.slice(0, 10).forEach(t => {\n  const due = t.due_date ? new Date(t.due_date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';\n  msg += `${emoji[t.priority] || '⚪'} ${t.title}${due ? ` — was due ${due}` : ''}\\n`;\n});\nmsg += `\\n_Reply 'show my tasks' to manage them._`;\n\nreturn [{ json: { nudge_text: msg } }];"
+      },
+      "id": "build-nudge",
+      "name": "Build Nudge Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.nudge_text }}\",\n    \"preview_url\": false\n  }\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "send-nudge",
+      "name": "Send WhatsApp Nudge",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Every Hour": {
+      "main": [
+        [{ "node": "Fetch Overdue Tasks", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Overdue Tasks": {
+      "main": [
+        [{ "node": "Build Nudge Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Build Nudge Message": {
+      "main": [
+        [{ "node": "Send WhatsApp Nudge", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "id": "task-reminders-v1",
+  "tags": ["tasks", "phase3"]
+}

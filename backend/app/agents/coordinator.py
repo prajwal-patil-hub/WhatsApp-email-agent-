@@ -17,6 +17,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.email_agent import EmailAgent
+from app.agents.task_agent import TaskAgent
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.memory import short_term
@@ -34,10 +35,10 @@ unless a detailed response is explicitly needed.
 Current capabilities:
 - General conversation and Q&A
 - Email management — read inbox, draft replies, send emails (Gmail & Outlook)
+- Task management — create, list, update, complete tasks with priorities, due dates, recurrence
 - Remembering context within this conversation and long-term memory
 
 Coming soon:
-- Task creation and tracking (Phase 3)
 - Calendar scheduling (Phase 4)
 - Document search and knowledge base (Phase 4)
 - Research reports (Phase 5)
@@ -81,6 +82,7 @@ class ExecutiveCoordinator:
         self._ollama = ollama
         self._settings = get_settings()
         self._email_agent = EmailAgent(ollama=ollama)
+        self._task_agent = TaskAgent(ollama=ollama)
 
     async def process(
         self,
@@ -102,7 +104,7 @@ class ExecutiveCoordinator:
             response_text = await self._route_email(db, user_id, intent, message)
             routed_to = "email_agent"
         elif intent in ("task_create", "task_list", "task_update"):
-            response_text = await self._route_task(intent, message)
+            response_text = await self._route_task(db, user_id, intent, message)
             routed_to = "task_agent"
         elif intent in ("calendar_schedule", "calendar_query"):
             response_text = await self._route_calendar(intent, message)
@@ -206,11 +208,10 @@ class ExecutiveCoordinator:
     ) -> str:
         return await self._email_agent.handle_command(db, user_id, intent, message)
 
-    async def _route_task(self, intent: str, message: str) -> str:
-        return (
-            "✅ *Task management* is coming in Phase 3! I'll be able to create, track, and "
-            "remind you about tasks. I'll also proactively follow up on overdue items."
-        )
+    async def _route_task(
+        self, db: AsyncSession, user_id: uuid.UUID, intent: str, message: str
+    ) -> str:
+        return await self._task_agent.handle_command(db, user_id, intent, message)
 
     async def _route_calendar(self, intent: str, message: str) -> str:
         return (
