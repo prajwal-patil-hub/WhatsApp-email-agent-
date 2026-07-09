@@ -17,6 +17,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.email_agent import EmailAgent
+from app.agents.knowledge_agent import KnowledgeAgent
+from app.agents.scheduling_agent import SchedulingAgent
 from app.agents.task_agent import TaskAgent
 from app.core.config import get_settings
 from app.core.logging import get_logger
@@ -36,11 +38,11 @@ Current capabilities:
 - General conversation and Q&A
 - Email management — read inbox, draft replies, send emails (Gmail & Outlook)
 - Task management — create, list, update, complete tasks with priorities, due dates, recurrence
-- Remembering context within this conversation and long-term memory
+- Calendar — schedule meetings, check your agenda (Google Calendar)
+- Knowledge base — ingest documents/notes, answer questions from them (RAG)
+- Remembering context within this conversation and long-term semantic memory
 
 Coming soon:
-- Calendar scheduling (Phase 4)
-- Document search and knowledge base (Phase 4)
 - Research reports (Phase 5)
 
 Always be helpful, proactive, and professional. If you cannot do something yet, say so clearly \
@@ -83,6 +85,7 @@ class ExecutiveCoordinator:
         self._settings = get_settings()
         self._email_agent = EmailAgent(ollama=ollama)
         self._task_agent = TaskAgent(ollama=ollama)
+        self._scheduling_agent = SchedulingAgent(ollama=ollama)
 
     async def process(
         self,
@@ -107,10 +110,10 @@ class ExecutiveCoordinator:
             response_text = await self._route_task(db, user_id, intent, message)
             routed_to = "task_agent"
         elif intent in ("calendar_schedule", "calendar_query"):
-            response_text = await self._route_calendar(intent, message)
+            response_text = await self._route_calendar(db, user_id, intent, message)
             routed_to = "scheduling_agent"
         elif intent in ("knowledge_search", "knowledge_ingest"):
-            response_text = await self._route_knowledge(intent, message)
+            response_text = await self._route_knowledge(db, user_id, intent, message)
             routed_to = "knowledge_agent"
         elif intent == "research":
             response_text = await self._route_research(message)
@@ -213,17 +216,16 @@ class ExecutiveCoordinator:
     ) -> str:
         return await self._task_agent.handle_command(db, user_id, intent, message)
 
-    async def _route_calendar(self, intent: str, message: str) -> str:
-        return (
-            "📅 *Calendar integration* is coming in Phase 4! I'll be able to schedule meetings, "
-            "check your availability, and send invites on your behalf."
-        )
+    async def _route_calendar(
+        self, db: AsyncSession, user_id: uuid.UUID, intent: str, message: str
+    ) -> str:
+        return await self._scheduling_agent.handle_command(db, user_id, intent, message)
 
-    async def _route_knowledge(self, intent: str, message: str) -> str:
-        return (
-            "🧠 *Knowledge base* is coming in Phase 4! You'll be able to send me PDFs, "
-            "documents, and links, and I'll be able to answer questions about them."
-        )
+    async def _route_knowledge(
+        self, db: AsyncSession, user_id: uuid.UUID, intent: str, message: str
+    ) -> str:
+        agent = KnowledgeAgent(ollama=self._ollama)
+        return await agent.handle_command(db, user_id, intent, message)
 
     async def _route_research(self, message: str) -> str:
         return (

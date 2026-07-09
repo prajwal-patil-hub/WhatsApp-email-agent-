@@ -5,7 +5,7 @@ Each memory has:
 - A PostgreSQL record with structured metadata
 - A Qdrant vector point for semantic similarity search
 
-Phase 1: PostgreSQL storage only (Qdrant search activated in Phase 4).
+Phase 4: Qdrant semantic search active, PostgreSQL remains source of truth.
 """
 
 import uuid
@@ -29,7 +29,7 @@ async def store_memory(
     summary: str | None = None,
     importance: float = 0.5,
     source: str | None = None,
-    embed: bool = False,
+    embed: bool = True,
 ) -> Memory:
     memory = Memory(
         user_id=user_id,
@@ -61,7 +61,12 @@ async def search_memories(
     memory_type: str | None = None,
     limit: int = 10,
 ) -> list[Memory]:
-    """Phase 1: filter-only search. Phase 4: semantic search via Qdrant."""
+    """Semantic search via Qdrant (Phase 4), falling back to PG filter search."""
+    if query:
+        semantic = await _semantic_search(db, user_id, query, memory_type, limit)
+        if semantic is not None:
+            return semantic
+
     now = datetime.now(timezone.utc)
     stmt = (
         select(Memory)
@@ -102,33 +107,68 @@ async def delete_memory(
     return True
 
 
+async def _semantic_search(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    query: str,
+    memory_type: str | None,
+    limit: int,
+) -> list[Memory] | None:
+    """Returns None when Qdrant/Ollama are unavailable so callers can fall back."""
+    try:
+        from app.services.ollama import get_ollama_service
+        from app.services.qdrant import get_qdrant_service
+
+        settings = get_settings()
+        vector = await get_ollama_service().embed(query)
+        hits = await get_qdrant_service().search(
+            collection=settings.QDRANT_MEMORY_COLLECTION,
+            vector=vector,
+            user_id=str(user_id),
+            limit=limit,
+        )
+    except Exception as exc:
+        logger.warning("semantic_search_unavailable", error=str(exc))
+        return None
+
+    if not hits:
+        return []
+
+    memory_ids = [uuid.UUID(h["memory_id"]) for h in hits if h.get("memory_id")]
+    if not memory_ids:
+        return []
+
+    now = datetime.now(timezone.utc)
+    stmt = select(Memory).where(
+        Memory.id.in_(memory_ids),
+        Memory.user_id == user_id,
+        (Memory.expires_at == None) | (Memory.expires_at > now),  # noqa: E711
+    )
+    if memory_type:
+        stmt = stmt.where(Memory.memory_type == memory_type)
+    result = await db.execute(stmt)
+    by_id = {m.id: m for m in result.scalars().all()}
+    # Preserve Qdrant relevance order
+    return [by_id[mid] for mid in memory_ids if mid in by_id]
+
+
 async def _store_embedding(memory: Memory) -> None:
     """Store vector in Qdrant. Activated in Phase 4 when knowledge base is built."""
     try:
         from app.services.ollama import get_ollama_service
-        from qdrant_client import QdrantClient
-        from qdrant_client.models import PointStruct
+        from app.services.qdrant import get_qdrant_service
 
         settings = get_settings()
-        ollama = get_ollama_service()
-        vector = await ollama.embed(memory.content)
-
-        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-        point_id = str(uuid.uuid4())
-        client.upsert(
-            collection_name=settings.QDRANT_MEMORY_COLLECTION,
-            points=[
-                PointStruct(
-                    id=point_id,
-                    vector=vector,
-                    payload={
-                        "memory_id": str(memory.id),
-                        "user_id": str(memory.user_id),
-                        "memory_type": memory.memory_type,
-                        "summary": memory.summary,
-                    },
-                )
-            ],
+        vector = await get_ollama_service().embed(memory.content)
+        point_id = await get_qdrant_service().upsert(
+            collection=settings.QDRANT_MEMORY_COLLECTION,
+            vector=vector,
+            payload={
+                "memory_id": str(memory.id),
+                "user_id": str(memory.user_id),
+                "memory_type": memory.memory_type,
+                "summary": memory.summary,
+            },
         )
         memory.embedding_id = point_id
     except Exception as exc:
@@ -137,13 +177,11 @@ async def _store_embedding(memory: Memory) -> None:
 
 async def _delete_embedding(embedding_id: str) -> None:
     try:
-        from qdrant_client import QdrantClient
+        from app.services.qdrant import get_qdrant_service
 
         settings = get_settings()
-        client = QdrantClient(url=settings.QDRANT_URL, api_key=settings.QDRANT_API_KEY)
-        client.delete(
-            collection_name=settings.QDRANT_MEMORY_COLLECTION,
-            points_selector=[embedding_id],
+        await get_qdrant_service().delete_points(
+            settings.QDRANT_MEMORY_COLLECTION, [embedding_id]
         )
     except Exception as exc:
         logger.warning("embedding_delete_failed", error=str(exc), embedding_id=embedding_id)

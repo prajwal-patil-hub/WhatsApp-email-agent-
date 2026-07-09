@@ -9,7 +9,7 @@
 
 A **locally-hosted, privacy-first Personal AI Executive Assistant** that operates primarily through WhatsApp. The user (Prajwal Patil — prajwalpatil522@gmail.com) communicates via WhatsApp; the AI understands text and voice notes, manages email/tasks/calendar/knowledge, conducts research, and generates briefings. All LLM inference runs locally via Ollama — no data leaves the machine.
 
-This is a **7-phase project**. Phases 1–3 are fully built. Phases 4–7 are planned with stubs and interfaces already in place.
+This is a **7-phase project**. Phases 1–4 are fully built. Phases 5–7 are planned with stubs and interfaces already in place.
 
 ---
 
@@ -70,12 +70,12 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 | 1 | Core WhatsApp Assistant | ✅ COMPLETE | 100% |
 | 2 | Email Integration | ✅ COMPLETE | 100% |
 | 3 | Task Management | ✅ COMPLETE | 100% |
-| 4 | Knowledge Base + Calendar | ⏳ NOT STARTED | 0% |
+| 4 | Knowledge Base + Calendar | ✅ COMPLETE | 100% |
 | 5 | Research Agent | ⏳ NOT STARTED | 0% |
 | 6 | Admin Dashboard | ⏳ NOT STARTED | 0% |
 | 7 | Advanced Automations | ⏳ NOT STARTED | 0% |
 
-**Overall: 43% complete (Phases 1–3 of 7 done)**
+**Overall: 57% complete (Phases 1–4 of 7 done)**
 
 ---
 
@@ -99,8 +99,8 @@ WhatsApp → Meta API → n8n (verify + parse) → FastAPI → Executive Coordin
 │   │   │   ├── email_agent.py          ← Phase 2 COMPLETE. Gmail+Outlook.
 │   │   │   ├── task_agent.py           ← Phase 3 COMPLETE. NL task mgmt.
 │   │   │   ├── research_agent.py       ← STUB. Implement in Phase 5.
-│   │   │   ├── knowledge_agent.py      ← STUB. Implement in Phase 4.
-│   │   │   └── scheduling_agent.py     ← STUB. Implement in Phase 4.
+│   │   │   ├── knowledge_agent.py      ← Phase 4 COMPLETE. RAG over docs.
+│   │   │   └── scheduling_agent.py     ← Phase 4 COMPLETE. Google Calendar.
 │   │   ├── api/routes/
 │   │   │   ├── whatsapp.py             ← Webhook ingestion. Core entry point.
 │   │   │   ├── auth.py                 ← JWT token issue + revoke.
@@ -291,7 +291,7 @@ make test-integration         # integration tests only
 
 ---
 
-## 13. Phases 2–3 — COMPLETE. What To Build Next (Phase 4)
+## 13. Phases 2–4 — COMPLETE. What To Build Next (Phase 5)
 
 **Phase 2 shipped (2026-07-06):**
 - `backend/app/services/email_provider.py` — abstract EmailProvider + EmailMessage/EmailThread types
@@ -313,16 +313,25 @@ make test-integration         # integration tests only
 - Coordinator routes task_create/task_list/task_update → TaskAgent; morning_briefing workflow's GET /tasks call is now functional
 - Response shape {"items": [...], "total": n} matches what morning_briefing.json already expects
 
-**Phase 4 = Knowledge Base + Calendar.** Stubs: `knowledge_agent.py`, `scheduling_agent.py`.
+**Phase 4 shipped (2026-07-09):**
+- `app/services/qdrant.py` — QdrantService (AsyncQdrantClient): ensure_collections (768-dim cosine, memories + knowledge), user-filtered search, upsert, delete; bootstrapped non-fatally in app lifespan
+- `app/services/documents.py` — extract_text (PDF/DOCX/TXT/MD), paragraph-aware chunker (1200 chars, 200 overlap), content_hash dedup
+- `app/agents/knowledge_agent.py` — full RAG: ingest notes (WhatsApp text) + documents (upload) → chunk → embed → Qdrant; answer() retrieves top-5 user-scoped chunks → LLM answer with source citations
+- `app/services/gcal.py` + `app/agents/scheduling_agent.py` — Google Calendar: NL scheduling with conflict detection, agenda queries; tokens in email_credentials (provider="gcal"), same encrypt/refresh contract as email
+- `app/api/routes/knowledge.py` — GET /knowledge, POST /knowledge/upload (20MB cap), POST /knowledge/ask, DELETE /knowledge/{id} (Qdrant cleanup best-effort)
+- `app/api/routes/calendar.py` — OAuth /calendar/auth/google (+callback), /calendar/status, /calendar/events GET/POST, /calendar/disconnect — reuses Gmail OAuth credentials
+- `app/memory/long_term.py` — search_memories now semantic-first via Qdrant (relevance-ordered), graceful PG fallback when Qdrant/Ollama unavailable; store_memory embeds by default
+- Coordinator routes calendar_schedule/calendar_query → SchedulingAgent, knowledge_search/knowledge_ingest → KnowledgeAgent
+
+**Phase 5 = Research Agent.** Stub: `research_agent.py`.
 
 Steps to implement:
-1. Qdrant collections init + embedding pipeline (`nomic-embed-text` via Ollama)
-2. Document ingestion: PDF/DOCX/MD chunking (pypdf/python-docx already in requirements) → embeddings → Qdrant; knowledge_items table exists
-3. KnowledgeAgent: knowledge_ingest (from WhatsApp document messages) + knowledge_search (RAG: retrieve → LLM answer with citations)
-4. Wire long_term.search_memories to Qdrant semantic search (currently PostgreSQL ILIKE)
-5. Google Calendar OAuth (reuse email OAuth pattern) + SchedulingAgent: calendar_schedule/calendar_query
-6. Routes: /api/v1/knowledge (upload, search), /api/v1/calendar (events CRUD)
-7. Tests for both agents + routes
+1. Web search service — Brave Search API (BRAVE_SEARCH_API_KEY in config) or SearXNG fallback
+2. ResearchAgent: search → fetch top pages (httpx + readability extraction) → synthesize with OLLAMA_REASONING_MODEL (deepseek-r1) → cited report
+3. Wire coordinator: research intent → ResearchAgent
+4. Optionally store reports into knowledge base for future RAG
+5. Route: POST /api/v1/research
+6. Tests
 
 ---
 
@@ -363,6 +372,7 @@ git push -u origin claude/personal-ai-chief-of-staff-xAqWZ
 | 2026-05-30 | Full Phase 1 implemented: 90 files, 6,626 lines. Architecture doc, Docker, FastAPI, all agents (coordinator complete, 5 stubs), 3-layer memory, Whisper STT, n8n workflows, React dashboard, tests. 6 bugs caught + fixed by adversarial review. PR #1 opened. |
 | 2026-07-06 | Phase 2 (Email) implemented: Gmail + Outlook OAuth2, provider abstraction, EmailAgent (read/draft/send via LLM), 6 API routes, encrypted token storage, email_monitor n8n workflow, 24 new tests. Fixed: JSONB/ARRAY → JSON in ORM models (SQLite test compat; Postgres migration unchanged), dedup cache eviction rebinding bug, conftest test isolation (per-test in-memory DB + StaticPool), added client/test_user/auth_headers fixtures. Full suite: 70/70 passing. |
 | 2026-07-09 | Phase 3 (Tasks) implemented: TaskAgent with LLM NL parsing (create/list/complete/update/delete), priority + due-date inference, recurrence engine, REST CRUD /api/v1/tasks, overdue-reminder endpoint + hourly n8n nudge workflow, coordinator wiring. 24 new tests. Full suite: 94/94 passing. |
+| 2026-07-09 | Phase 4 (Knowledge+Calendar) implemented: QdrantService + collection bootstrap, document extraction/chunking, KnowledgeAgent RAG with citations, Google Calendar OAuth + SchedulingAgent (NL scheduling, conflict detection, agenda), knowledge/calendar API routes, long-term memory semantic search with PG fallback. 32 new tests. Full suite: 126/126 passing. |
 
 ---
 

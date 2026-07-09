@@ -1,6 +1,6 @@
 # Project Progress — Personal AI Chief of Staff
 > **Last Updated:** 2026-05-30
-> **Overall Completion:** 43% (Phases 1–3 of 7 complete)
+> **Overall Completion:** 57% (Phases 1–4 of 7 complete)
 > **Last Updated:** 2026-07-09
 > **Active Branch:** `claude/personal-ai-chief-of-staff-xAqWZ`
 > **Open PR:** https://github.com/prajwal-patil-hub/WhatsApp-email-agent-/pull/1
@@ -226,36 +226,31 @@
 
 ---
 
-## ⬜ PHASE 4 — Knowledge Base + Calendar
-**Status:** NOT STARTED
-**Estimated Effort:** 2 weeks
-**Prerequisites:** Phase 1 (Qdrant already in Docker Compose)
+## ✅ PHASE 4 — Knowledge Base + Calendar
+**Status:** COMPLETE (2026-07-09)
+**Delivered:** Qdrant RAG pipeline, KnowledgeAgent with citations, Google Calendar + SchedulingAgent, semantic long-term memory, 32 tests
 
 ### Checklist
 #### Knowledge Base (RAG Pipeline)
-- [ ] Add `pypdf`, `python-docx`, `langchain-text-splitters` or custom chunker
-- [ ] Implement `KnowledgeAgent.ingest_document()` — PDF/DOCX/TXT/MD → chunks → embeddings → Qdrant
-- [ ] Implement `KnowledgeAgent.search()` — query → embed → Qdrant search → top-k chunks
-- [ ] Implement `KnowledgeAgent.answer()` — RAG: search + LLM grounded answer
-- [ ] Create Qdrant collection `knowledge` on startup
-- [ ] Activate Qdrant for long-term memory (`long_term.py` `_store_embedding()` already written)
-- [ ] Create Qdrant collection `memories` on startup
-- [ ] WhatsApp: send PDF → transcribe/ingest → "Document indexed ✅"
-- [ ] WhatsApp: "Find my Deloitte notes" → semantic search + summary
-- [ ] Add `POST /api/v1/knowledge/ingest` endpoint
-- [ ] Add `GET /api/v1/knowledge/search` endpoint
-- [ ] Web page ingestion: `services/web_scraper.py` using `httpx` + `BeautifulSoup`
-- [ ] Wire coordinator: `knowledge_search/ingest` → `KnowledgeAgent`
+- [x] Custom paragraph-aware chunker in `services/documents.py` (1200 chars, 200 overlap; pypdf/python-docx already in requirements — no new deps)
+- [x] `KnowledgeAgent.ingest_document()` / `ingest_note()` — PDF/DOCX/TXT/MD → chunks → nomic-embed-text embeddings → Qdrant; SHA-256 content_hash dedup; per-chunk failure tolerance (status ready/failed)
+- [x] `KnowledgeAgent.search()` — embed query → user-filtered Qdrant search → top-k chunks with scores
+- [x] `KnowledgeAgent.answer()` — RAG with inline [n] citations + source list; honest "not in knowledge base" fallback
+- [x] Qdrant collections (`knowledge`, `memories`, 768-dim cosine) bootstrapped in app lifespan, non-fatal if Qdrant down
+- [x] Long-term memory activated: store_memory embeds by default; search_memories semantic-first (relevance-ordered) with PG fallback
+- [x] WhatsApp: "remember this: ..." → ingested as note; questions answered from KB
+- [x] API: GET /knowledge, POST /knowledge/upload (20MB cap, type validation), POST /knowledge/ask, DELETE /knowledge/{id}
+- [ ] Web page ingestion (deferred → Phase 5 research agent shares the fetch pipeline)
+- [x] Wire coordinator: knowledge_search/ingest → KnowledgeAgent
 
 #### Calendar
-- [ ] Add Google Calendar OAuth2 (`google-api-python-client`)
-- [ ] Implement `SchedulingAgent.get_agenda()` — list events for a day
-- [ ] Implement `SchedulingAgent.schedule_meeting()` — NL → create event
-- [ ] Implement `SchedulingAgent.find_slot()` — find free slot for attendees
-- [ ] Conflict detection before scheduling
-- [ ] Meeting prep brief: "Your 3pm meeting with X — here's context..."
-- [ ] Wire coordinator: `calendar_schedule/query` → `SchedulingAgent`
-- [ ] Tests for both knowledge and scheduling agents
+- [x] Google Calendar OAuth2 — reuses Gmail client credentials + email_credentials table (provider="gcal"), Fernet-encrypted tokens, transparent refresh
+- [x] `SchedulingAgent` agenda queries — "what's on today/next Monday" → day event list
+- [x] NL scheduling — LLM parses title/start/duration/attendees/location against current datetime → create event with invites (sendUpdates=all)
+- [x] Conflict detection — overlapping events flagged in the confirmation message
+- [ ] find_slot / meeting prep briefs (deferred → Phase 7 automations)
+- [x] Wire coordinator: calendar_schedule/query → SchedulingAgent
+- [x] Tests: 15 unit (knowledge+documents) + 7 unit (scheduling) + 11 integration (routes); full suite 126/126
 
 ---
 

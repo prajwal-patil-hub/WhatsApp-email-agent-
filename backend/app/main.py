@@ -34,7 +34,16 @@ async def lifespan(app: FastAPI):
 
         await asyncio.get_event_loop().run_in_executor(None, warmup_whisper)
 
-    logger.info("startup_complete", phase=1)
+    # Bootstrap Qdrant vector collections (non-fatal — semantic search degrades gracefully)
+    try:
+        from app.services.qdrant import get_qdrant_service
+
+        await get_qdrant_service().ensure_collections()
+        logger.info("qdrant_ready")
+    except Exception as exc:
+        logger.warning("qdrant_unavailable", error=str(exc))
+
+    logger.info("startup_complete", phase=4)
     yield
 
     logger.info("shutting_down")

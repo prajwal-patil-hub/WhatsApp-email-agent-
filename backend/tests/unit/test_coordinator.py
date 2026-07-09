@@ -108,14 +108,33 @@ class TestRoutingStubs:
         assert "Phase 5" in response
 
     @pytest.mark.asyncio
-    async def test_calendar_route_returns_phase4_message(self, coordinator):
-        response = await coordinator._route_calendar("calendar_schedule", "schedule meeting")
-        assert "Phase 4" in response
+    async def test_calendar_route_delegates_to_scheduling_agent(self, coordinator):
+        from unittest.mock import AsyncMock, patch
+        import uuid as _uuid
+        with patch.object(
+            coordinator._scheduling_agent, "handle_command", new_callable=AsyncMock
+        ) as mock_handle:
+            mock_handle.return_value = "scheduling agent response"
+            response = await coordinator._route_calendar(
+                None, _uuid.uuid4(), "calendar_schedule", "schedule meeting"
+            )
+        assert response == "scheduling agent response"
+        mock_handle.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_knowledge_route_returns_phase4_message(self, coordinator):
-        response = await coordinator._route_knowledge("knowledge_search", "find my notes")
-        assert "Phase 4" in response
+    async def test_knowledge_route_delegates_to_knowledge_agent(self, coordinator):
+        from unittest.mock import AsyncMock, patch
+        import uuid as _uuid
+        with patch(
+            "app.agents.coordinator.KnowledgeAgent"
+        ) as mock_cls:
+            mock_agent = mock_cls.return_value
+            mock_agent.handle_command = AsyncMock(return_value="knowledge agent response")
+            response = await coordinator._route_knowledge(
+                None, _uuid.uuid4(), "knowledge_search", "find my notes"
+            )
+        assert response == "knowledge agent response"
+        mock_agent.handle_command.assert_awaited_once()
 
 
 class TestChatResponse:
