@@ -56,6 +56,39 @@ class WhatsAppService:
         except Exception:
             pass  # typing indicator failure is non-fatal
 
+    async def send_audio(self, to: str, audio_bytes: bytes, mime_type: str = "audio/mpeg") -> dict:
+        """Upload audio to the WhatsApp media API, then send it as a voice reply."""
+        upload_url = (
+            f"{self._settings.whatsapp_api_url}"
+            f"/{self._settings.WHATSAPP_PHONE_NUMBER_ID}/media"
+        )
+        async with httpx.AsyncClient(timeout=60) as client:
+            upload_resp = await client.post(
+                upload_url,
+                headers={"Authorization": f"Bearer {self._settings.WHATSAPP_API_TOKEN}"},
+                data={"messaging_product": "whatsapp", "type": mime_type},
+                files={"file": ("reply.mp3", audio_bytes, mime_type)},
+            )
+            upload_resp.raise_for_status()
+            media_id = upload_resp.json()["id"]
+
+            send_url = (
+                f"{self._settings.whatsapp_api_url}"
+                f"/{self._settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+            )
+            payload = {
+                "messaging_product": "whatsapp",
+                "recipient_type": "individual",
+                "to": to,
+                "type": "audio",
+                "audio": {"id": media_id},
+            }
+            resp = await client.post(send_url, json=payload, headers=self._headers())
+            resp.raise_for_status()
+            data = resp.json()
+            logger.info("whatsapp_audio_sent", to=to, media_id=media_id)
+            return data
+
     async def get_media_url(self, media_id: str) -> str:
         url = f"{self._settings.whatsapp_api_url}/{media_id}"
         async with httpx.AsyncClient(timeout=30) as client:

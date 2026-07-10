@@ -269,8 +269,16 @@ async def _process_message_with_db(
 
         await db.commit()
 
-        # Send WhatsApp reply
+        # Send WhatsApp reply — voice notes get a spoken reply too (Phase 7)
         await whatsapp.send_text(phone_number, response.content)
+        if message_type == "voice":
+            try:
+                from app.services.edge_tts import text_to_speech
+
+                audio = await text_to_speech(response.content[:600])
+                await whatsapp.send_audio(phone_number, audio)
+            except Exception as exc:
+                logger.warning("voice_reply_failed", error=str(exc))
 
     except Exception as exc:
         logger.error("message_processing_failed", error=str(exc), phone_number=phone_number)

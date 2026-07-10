@@ -76,6 +76,7 @@ class Settings(BaseSettings):
 
     # ── Research Agent (Phase 5) ─────────────────────────────────────────────
     BRAVE_SEARCH_API_KEY: Optional[str] = None
+    SEARXNG_URL: Optional[str] = None
 
     @field_validator("DATABASE_URL")
     @classmethod

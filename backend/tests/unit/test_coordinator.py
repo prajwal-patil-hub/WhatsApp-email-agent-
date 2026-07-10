@@ -103,9 +103,18 @@ class TestRoutingStubs:
         mock_handle.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_research_route_returns_phase5_message(self, coordinator):
-        response = await coordinator._route_research("research AI agents")
-        assert "Phase 5" in response
+    async def test_research_route_delegates_to_research_agent(self, coordinator):
+        from unittest.mock import AsyncMock, patch
+        import uuid as _uuid
+        with patch.object(
+            coordinator._research_agent, "handle_command", new_callable=AsyncMock
+        ) as mock_handle:
+            mock_handle.return_value = "research agent response"
+            response = await coordinator._route_research(
+                None, _uuid.uuid4(), "research AI agents"
+            )
+        assert response == "research agent response"
+        mock_handle.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_calendar_route_delegates_to_scheduling_agent(self, coordinator):

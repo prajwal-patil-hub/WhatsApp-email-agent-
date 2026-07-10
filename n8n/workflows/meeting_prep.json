@@ -1,0 +1,78 @@
+{
+  "name": "Meeting Prep — 30-Minute Heads-Up",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "*/15 7-20 * * 1-5" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 15 Min (Work Hours)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/calendar/upcoming",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [{ "name": "within_minutes", "value": "35" }]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-upcoming",
+      "name": "Fetch Upcoming Events",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build prep message; dedupe via workflow static data so each event nudges once\nconst data = $input.item.json;\nconst events = data.items || [];\nif (events.length === 0) return [];\n\nconst staticData = $getWorkflowStaticData('global');\nstaticData.notified = staticData.notified || {};\n\nconst fresh = events.filter(e => !staticData.notified[e.id]);\nif (fresh.length === 0) return [];\n\nfresh.forEach(e => { staticData.notified[e.id] = Date.now(); });\n// Prune entries older than 6h\nfor (const [id, ts] of Object.entries(staticData.notified)) {\n  if (Date.now() - ts > 6 * 3600 * 1000) delete staticData.notified[id];\n}\n\nlet msg = `⏰ *Upcoming meeting${fresh.length > 1 ? 's' : ''}*\\n\\n`;\nfresh.forEach(e => {\n  const start = new Date(e.start).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });\n  msg += `📅 *${e.title}* at ${start}\\n`;\n  if (e.location) msg += `📍 ${e.location}\\n`;\n  if (e.attendees?.length) msg += `👥 ${e.attendees.join(', ')}\\n`;\n  if (e.link) msg += `🔗 ${e.link}\\n`;\n  msg += '\\n';\n});\nmsg += `_Ask me 'what do I know about <attendee>' for prep context._`;\n\nreturn [{ json: { prep_text: msg } }];"
+      },
+      "id": "build-prep",
+      "name": "Build Prep Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": \"{{ $json.prep_text }}\", \"preview_url\": false }\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "send-prep",
+      "name": "Send WhatsApp Prep",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    }
+  ],
+  "connections": {
+    "Every 15 Min (Work Hours)": { "main": [[{ "node": "Fetch Upcoming Events", "type": "main", "index": 0 }]] },
+    "Fetch Upcoming Events": { "main": [[{ "node": "Build Prep Message", "type": "main", "index": 0 }]] },
+    "Build Prep Message": { "main": [[{ "node": "Send WhatsApp Prep", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "timezone": "America/New_York" },
+  "staticData": null,
+  "id": "meeting-prep-v1",
+  "tags": ["calendar", "phase7"]
+}

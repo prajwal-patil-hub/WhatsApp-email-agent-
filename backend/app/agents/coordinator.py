@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.email_agent import EmailAgent
 from app.agents.knowledge_agent import KnowledgeAgent
+from app.agents.research_agent import ResearchAgent
 from app.agents.scheduling_agent import SchedulingAgent
 from app.agents.task_agent import TaskAgent
 from app.core.config import get_settings
@@ -40,10 +41,9 @@ Current capabilities:
 - Task management — create, list, update, complete tasks with priorities, due dates, recurrence
 - Calendar — schedule meetings, check your agenda (Google Calendar)
 - Knowledge base — ingest documents/notes, answer questions from them (RAG)
+- Research — web search, multi-source synthesis, cited executive reports
+- Daily briefing on demand ("give me my briefing")
 - Remembering context within this conversation and long-term semantic memory
-
-Coming soon:
-- Research reports (Phase 5)
 
 Always be helpful, proactive, and professional. If you cannot do something yet, say so clearly \
 and suggest when it will be available."""
@@ -86,6 +86,7 @@ class ExecutiveCoordinator:
         self._email_agent = EmailAgent(ollama=ollama)
         self._task_agent = TaskAgent(ollama=ollama)
         self._scheduling_agent = SchedulingAgent(ollama=ollama)
+        self._research_agent = ResearchAgent(ollama=ollama)
 
     async def process(
         self,
@@ -116,16 +117,14 @@ class ExecutiveCoordinator:
             response_text = await self._route_knowledge(db, user_id, intent, message)
             routed_to = "knowledge_agent"
         elif intent == "research":
-            response_text = await self._route_research(message)
+            response_text = await self._route_research(db, user_id, message)
             routed_to = "research_agent"
         elif intent in ("memory_store", "memory_search"):
             response_text = await self._handle_memory(db, user_id, intent, message)
         elif intent == "briefing":
-            response_text = (
-                "📋 *Daily Briefing* will be delivered automatically every morning at 7am! "
-                "The morning briefing includes your calendar, priority emails, pending tasks, "
-                "and project updates. (Full briefing agent active in Phase 7)"
-            )
+            from app.services.briefing import build_briefing
+
+            response_text = await build_briefing(db, user_id)
             routed_to = "briefing_agent"
         else:
             response_text, model, tokens = await self._chat_response(
@@ -227,11 +226,10 @@ class ExecutiveCoordinator:
         agent = KnowledgeAgent(ollama=self._ollama)
         return await agent.handle_command(db, user_id, intent, message)
 
-    async def _route_research(self, message: str) -> str:
-        return (
-            "🔍 *Research agent* is coming in Phase 5! I'll be able to search the web, "
-            "synthesize information from multiple sources, and generate executive reports."
-        )
+    async def _route_research(
+        self, db: AsyncSession, user_id: uuid.UUID, message: str
+    ) -> str:
+        return await self._research_agent.handle_command(db, user_id, "research", message)
 
     async def _handle_memory(
         self, db: AsyncSession, user_id: uuid.UUID, intent: str, message: str

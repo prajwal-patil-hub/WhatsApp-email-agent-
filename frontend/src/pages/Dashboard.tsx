@@ -1,8 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Activity, BrainCircuit, CheckSquare, MessageSquare } from "lucide-react";
-import axios from "axios";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import { api, isAuthenticated } from "../lib/api";
 
 interface HealthResponse {
   status: string;
@@ -11,25 +9,55 @@ interface HealthResponse {
   uptime_seconds: number;
 }
 
+interface SystemHealth {
+  postgres: string;
+  redis: string;
+  qdrant: string;
+  ollama: string;
+}
+
+interface TaskAnalytics {
+  pending: number;
+  in_progress: number;
+  completed: number;
+  completed_last_7_days: number;
+}
+
 export default function Dashboard() {
+  const authed = isAuthenticated();
+
   const { data: health, isLoading } = useQuery<HealthResponse>({
     queryKey: ["health"],
-    queryFn: () => axios.get(`${API_URL}/api/v1/health`).then((r) => r.data),
+    queryFn: () => api.get("/health").then((r) => r.data),
     refetchInterval: 30_000,
   });
 
+  const { data: sysHealth } = useQuery<SystemHealth>({
+    queryKey: ["system-health"],
+    queryFn: () => api.get("/admin/system/health").then((r) => r.data),
+    enabled: authed,
+    refetchInterval: 30_000,
+  });
+
+  const { data: taskStats } = useQuery<TaskAnalytics>({
+    queryKey: ["task-analytics"],
+    queryFn: () => api.get("/admin/analytics/tasks").then((r) => r.data),
+    enabled: authed,
+    refetchInterval: 60_000,
+  });
+
   const stats = [
-    { label: "Status", value: isLoading ? "..." : health?.status ?? "unknown", icon: Activity, color: "text-green-400" },
-    { label: "Phase", value: health?.phase ? `Phase ${health.phase}` : "—", icon: CheckSquare, color: "text-indigo-400" },
-    { label: "Uptime", value: health ? formatUptime(health.uptime_seconds) : "—", icon: Activity, color: "text-blue-400" },
-    { label: "Version", value: health?.version ?? "—", icon: BrainCircuit, color: "text-purple-400" },
+    { label: "API Status", value: isLoading ? "..." : health?.status ?? "unknown", icon: Activity, color: "text-green-400" },
+    { label: "Tasks Pending", value: taskStats ? String(taskStats.pending) : "—", icon: CheckSquare, color: "text-yellow-400" },
+    { label: "Done This Week", value: taskStats ? String(taskStats.completed_last_7_days) : "—", icon: CheckSquare, color: "text-green-400" },
+    { label: "Uptime", value: health ? formatUptime(health.uptime_seconds) : "—", icon: BrainCircuit, color: "text-purple-400" },
   ];
 
   return (
     <div className="p-8">
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-white">Dashboard</h2>
-        <p className="text-gray-400 mt-1">Personal AI Chief of Staff — System Overview</p>
+        <p className="text-gray-400 mt-1">Personal AI Chief of Staff — all 7 phases live</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -45,66 +73,61 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <PhaseRoadmap />
-        <QuickActions />
+        <ServiceHealth sysHealth={sysHealth} authed={authed} />
+        <Capabilities />
       </div>
     </div>
   );
 }
 
-function PhaseRoadmap() {
-  const phases = [
-    { n: 1, label: "Core WhatsApp Assistant", status: "active" },
-    { n: 2, label: "Email Integration", status: "planned" },
-    { n: 3, label: "Task Management", status: "planned" },
-    { n: 4, label: "Knowledge Base + Calendar", status: "planned" },
-    { n: 5, label: "Research Agent", status: "planned" },
-    { n: 6, label: "Admin Dashboard", status: "planned" },
-    { n: 7, label: "Advanced Automations", status: "planned" },
-  ];
+function ServiceHealth({ sysHealth, authed }: { sysHealth?: SystemHealth; authed: boolean }) {
+  const services = [
+    { key: "postgres", label: "PostgreSQL" },
+    { key: "redis", label: "Redis" },
+    { key: "qdrant", label: "Qdrant" },
+    { key: "ollama", label: "Ollama" },
+  ] as const;
 
   return (
     <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <h3 className="text-lg font-semibold text-white mb-4">Implementation Roadmap</h3>
-      <div className="space-y-3">
-        {phases.map(({ n, label, status }) => (
-          <div key={n} className="flex items-center gap-3">
-            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-              status === "active" ? "bg-green-500 text-white" : "bg-gray-700 text-gray-400"
-            }`}>
-              {n}
-            </div>
-            <span className={`text-sm ${status === "active" ? "text-white font-medium" : "text-gray-400"}`}>
-              {label}
-            </span>
-            {status === "active" && (
-              <span className="ml-auto text-xs bg-green-500/20 text-green-400 px-2 py-0.5 rounded-full">
-                Active
-              </span>
-            )}
-          </div>
-        ))}
-      </div>
+      <h3 className="text-lg font-semibold text-white mb-4">Service Health</h3>
+      {!authed ? (
+        <p className="text-sm text-gray-500">Sign in via Settings to see live service status.</p>
+      ) : (
+        <div className="space-y-3">
+          {services.map(({ key, label }) => {
+            const ok = sysHealth?.[key] === "ok";
+            return (
+              <div key={key} className="flex items-center justify-between">
+                <span className="text-sm text-gray-300">{label}</span>
+                <span className={`flex items-center gap-2 text-xs ${ok ? "text-green-400" : "text-red-400"}`}>
+                  <span className={`w-2 h-2 rounded-full ${ok ? "bg-green-500" : "bg-red-500"}`} />
+                  {sysHealth ? (ok ? "healthy" : "down") : "checking…"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
 
-function QuickActions() {
-  const actions = [
-    { label: "View Conversations", icon: MessageSquare, desc: "Browse WhatsApp message history" },
-    { label: "Browse Memory", icon: BrainCircuit, desc: "View stored long-term memories" },
-    { label: "Manage Tasks", icon: CheckSquare, desc: "Coming in Phase 3" },
+function Capabilities() {
+  const items = [
+    { icon: MessageSquare, label: "WhatsApp text + voice", desc: "Whisper STT in, Edge TTS voice replies out" },
+    { icon: MessageSquare, label: "Email (Gmail + Outlook)", desc: "Read, draft, send from chat" },
+    { icon: CheckSquare, label: "Tasks + Calendar", desc: "NL commands, recurrence, reminders, conflict checks" },
+    { icon: BrainCircuit, label: "Knowledge + Research", desc: "RAG over your docs, cited web research reports" },
+    { icon: Activity, label: "Automations", desc: "Morning briefing, meeting prep, weekly review, overdue nudges" },
   ];
 
   return (
     <div className="bg-gray-900 rounded-xl p-6 border border-gray-800">
-      <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+      <h3 className="text-lg font-semibold text-white mb-4">Live Capabilities</h3>
       <div className="space-y-3">
-        {actions.map(({ label, icon: Icon, desc }) => (
-          <button
-            key={label}
-            className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-800 transition-colors text-left"
-          >
+        {items.map(({ icon: Icon, label, desc }) => (
+          <div key={label} className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-indigo-600/20 flex items-center justify-center flex-shrink-0">
               <Icon className="w-4 h-4 text-indigo-400" />
             </div>
@@ -112,7 +135,7 @@ function QuickActions() {
               <p className="text-sm font-medium text-white">{label}</p>
               <p className="text-xs text-gray-400">{desc}</p>
             </div>
-          </button>
+          </div>
         ))}
       </div>
     </div>

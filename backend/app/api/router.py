@@ -1,13 +1,16 @@
 from fastapi import APIRouter
 
 from app.api.routes import (
+    admin,
     auth,
+    briefing,
     calendar,
     email,
     health,
     knowledge,
     memory,
     messages,
+    research,
     tasks,
     whatsapp,
 )
@@ -23,3 +26,6 @@ api_router.include_router(email.router)
 api_router.include_router(tasks.router)
 api_router.include_router(knowledge.router)
 api_router.include_router(calendar.router)
+api_router.include_router(research.router)
+api_router.include_router(briefing.router)
+api_router.include_router(admin.router)

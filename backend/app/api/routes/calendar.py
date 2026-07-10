@@ -206,6 +206,29 @@ async def list_events(
     )
 
 
+@router.get("/upcoming", response_model=EventListResponse)
+async def upcoming_events(
+    current_user: CurrentUser,
+    db: Database,
+    within_minutes: int = Query(default=35, ge=5, le=240),
+) -> EventListResponse:
+    """Events starting within the window — powers the meeting-prep n8n nudge."""
+    (service_cred, agent) = await _get_gcal_service(db, current_user.id)
+    service, cred = service_cred
+    if service is None:
+        return EventListResponse(items=[], total=0)
+    try:
+        now = datetime.now(timezone.utc)
+        events = await service.list_events(
+            now, now + timedelta(minutes=within_minutes), limit=10
+        )
+    finally:
+        await agent._sync_tokens(db, cred, service)
+    return EventListResponse(
+        items=[EventResponse(**e.__dict__) for e in events], total=len(events)
+    )
+
+
 @router.post("/events", response_model=EventResponse, status_code=status.HTTP_201_CREATED)
 async def create_event(
     payload: EventCreateRequest,

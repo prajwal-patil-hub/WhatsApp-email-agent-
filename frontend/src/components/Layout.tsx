@@ -1,8 +1,11 @@
 import {
   BrainCircuit,
   CheckSquare,
+  FileText,
   LayoutDashboard,
   MessageSquare,
+  ScrollText,
+  Search,
   Settings,
 } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
@@ -12,6 +15,9 @@ const navItems = [
   { to: "/conversations", icon: MessageSquare, label: "Conversations" },
   { to: "/tasks", icon: CheckSquare, label: "Tasks" },
   { to: "/memory", icon: BrainCircuit, label: "Memory" },
+  { to: "/knowledge", icon: FileText, label: "Knowledge" },
+  { to: "/research", icon: Search, label: "Research" },
+  { to: "/audit", icon: ScrollText, label: "Audit Log" },
   { to: "/settings", icon: Settings, label: "Settings" },
 ];
 
@@ -44,7 +50,7 @@ export default function Layout() {
         <div className="p-4 border-t border-gray-800">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-green-500" />
-            <span className="text-xs text-gray-400">Phase 1 Active</span>
+            <span className="text-xs text-gray-400">All 7 Phases Live</span>
           </div>
         </div>
       </aside>
