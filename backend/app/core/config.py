@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     OLLAMA_EMBEDDING_MODEL: str = "nomic-embed-text:latest"
     OLLAMA_TIMEOUT: int = 120
 
+    # ── Optional cloud LLM (OpenAI-compatible; used for "cloud:" model names) ──
+    # Default base is Z.ai (GLM models). Works with any OpenAI-compatible API.
+    CLOUD_LLM_API_BASE: str = "https://api.z.ai/api/paas/v4"
+    CLOUD_LLM_API_KEY: Optional[str] = None
+
     # ── WhatsApp ─────────────────────────────────────────────────────────────
     WHATSAPP_API_TOKEN: str
     WHATSAPP_PHONE_NUMBER_ID: str
