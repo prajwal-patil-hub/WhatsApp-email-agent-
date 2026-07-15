@@ -1,0 +1,105 @@
+{
+  "name": "Weekly Review — Sunday Evening",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 18 * * 0" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Sunday 6PM",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/admin/analytics/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-task-stats",
+      "name": "Fetch Task Stats",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 220],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/tasks",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "status", "value": "pending" },
+            { "name": "limit", "value": "10" }
+          ]
+        },
+        "options": { "timeout": 30000 }
+      },
+      "id": "fetch-pending",
+      "name": "Fetch Pending Tasks",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 380],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const stats = $('Fetch Task Stats').item.json || {};\nconst pending = ($('Fetch Pending Tasks').item.json.items) || [];\n\nlet msg = `📊 *Weekly Review*\\n\\n`;\nmsg += `✅ Completed this week: *${stats.completed_last_7_days ?? 0}*\\n`;\nmsg += `📋 Still pending: *${stats.pending ?? 0}*\\n`;\nmsg += `🚧 In progress: *${stats.in_progress ?? 0}*\\n\\n`;\n\nif (pending.length > 0) {\n  msg += `*Top of next week's list:*\\n`;\n  pending.slice(0, 5).forEach(t => {\n    const due = t.due_date ? ` (due ${new Date(t.due_date).toLocaleDateString()})` : '';\n    msg += `• ${t.title}${due}\\n`;\n  });\n  msg += '\\n';\n}\nmsg += `_Have a great week! Reply 'briefing' any morning for your daily rundown._`;\n\nreturn [{ json: { review_text: msg } }];"
+      },
+      "id": "build-review",
+      "name": "Build Review",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [700, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": \"{{ $json.review_text }}\", \"preview_url\": false }\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "send-review",
+      "name": "Send WhatsApp Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [940, 300]
+    }
+  ],
+  "connections": {
+    "Sunday 6PM": {
+      "main": [[
+        { "node": "Fetch Task Stats", "type": "main", "index": 0 },
+        { "node": "Fetch Pending Tasks", "type": "main", "index": 0 }
+      ]]
+    },
+    "Fetch Task Stats": { "main": [[{ "node": "Build Review", "type": "main", "index": 0 }]] },
+    "Fetch Pending Tasks": { "main": [[{ "node": "Build Review", "type": "main", "index": 0 }]] },
+    "Build Review": { "main": [[{ "node": "Send WhatsApp Review", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "timezone": "America/New_York" },
+  "staticData": null,
+  "id": "weekly-review-v1",
+  "tags": ["review", "phase7"]
+}

@@ -1,0 +1,126 @@
+{
+  "name": "Email Monitor — Check Inbox Every 5 Minutes",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "*/5 * * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/email/inbox",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "limit", "value": "10" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "fetch-inbox",
+      "name": "Fetch Inbox Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300],
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Only proceed if we have unread emails\nconst data = $input.item.json;\nconst unreadCount = data.unread_count || 0;\n\nif (unreadCount === 0) {\n  return [];\n}\n\nreturn [{ json: { unread_count: unreadCount, summary: data.summary } }];"
+      },
+      "id": "check-unread",
+      "name": "Any Unread?",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": {\n    \"body\": \"{{ $json.summary }}\",\n    \"preview_url\": false\n  }\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "send-notification",
+      "name": "Send WhatsApp Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [900, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/audit",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"action\": \"email.monitor.notification_sent\",\n  \"resource_type\": \"email\",\n  \"details\": { \"unread_count\": {{ $('Any Unread?').item.json.unread_count }} }\n}",
+        "options": {}
+      },
+      "id": "log-notification",
+      "name": "Log Notification Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1120, 300],
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {
+      "main": [
+        [{ "node": "Fetch Inbox Summary", "type": "main", "index": 0 }]
+      ]
+    },
+    "Fetch Inbox Summary": {
+      "main": [
+        [{ "node": "Any Unread?", "type": "main", "index": 0 }]
+      ]
+    },
+    "Any Unread?": {
+      "main": [
+        [{ "node": "Send WhatsApp Notification", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send WhatsApp Notification": {
+      "main": [
+        [{ "node": "Log Notification Sent", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "timezone": "America/New_York"
+  },
+  "staticData": null,
+  "id": "email-monitor-v1",
+  "tags": ["email", "phase2"]
+}

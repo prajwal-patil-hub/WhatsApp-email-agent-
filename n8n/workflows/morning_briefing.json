@@ -1,0 +1,62 @@
+{
+  "name": "Morning Executive Briefing",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [{ "field": "cronExpression", "expression": "0 7 * * 1-5" }]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Daily 7AM Trigger (Mon-Fri)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.BACKEND_URL }}/api/v1/briefing",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.BACKEND_ADMIN_TOKEN }}" }
+          ]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "id": "fetch-briefing",
+      "name": "Fetch Briefing (tasks + calendar + goals)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [460, 300]
+    },
+    {
+      "parameters": {
+        "url": "=https://graph.facebook.com/{{ $env.WHATSAPP_API_VERSION }}/{{ $env.WHATSAPP_PHONE_NUMBER_ID }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "=Bearer {{ $env.WHATSAPP_API_TOKEN }}" },
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "jsonBody": "={\n  \"messaging_product\": \"whatsapp\",\n  \"recipient_type\": \"individual\",\n  \"to\": \"{{ $env.ADMIN_PHONE_NUMBER }}\",\n  \"type\": \"text\",\n  \"text\": { \"body\": \"{{ $json.briefing }}\", \"preview_url\": false }\n}",
+        "options": { "timeout": 15000 }
+      },
+      "id": "send-whatsapp-briefing",
+      "name": "Send Briefing via WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [700, 300]
+    }
+  ],
+  "connections": {
+    "Daily 7AM Trigger (Mon-Fri)": { "main": [[{ "node": "Fetch Briefing (tasks + calendar + goals)", "type": "main", "index": 0 }]] },
+    "Fetch Briefing (tasks + calendar + goals)": { "main": [[{ "node": "Send Briefing via WhatsApp", "type": "main", "index": 0 }]] }
+  },
+  "settings": { "executionOrder": "v1", "saveManualExecutions": true, "timezone": "America/New_York" },
+  "staticData": null,
+  "id": "morning-briefing-v1",
+  "tags": ["briefing", "automation", "phase7"]
+}

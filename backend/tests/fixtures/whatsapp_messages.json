@@ -1,0 +1,104 @@
+{
+  "text_message": {
+    "object": "whatsapp_business_account",
+    "entry": [
+      {
+        "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+        "changes": [
+          {
+            "value": {
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "15550001234",
+                "phone_number_id": "123456789"
+              },
+              "contacts": [
+                {
+                  "profile": { "name": "Test User" },
+                  "wa_id": "14155551234"
+                }
+              ],
+              "messages": [
+                {
+                  "from": "14155551234",
+                  "id": "wamid.test_text_001",
+                  "timestamp": "1700000000",
+                  "type": "text",
+                  "text": { "body": "Hello, what can you do for me?" }
+                }
+              ]
+            },
+            "field": "messages"
+          }
+        ]
+      }
+    ]
+  },
+  "voice_message": {
+    "object": "whatsapp_business_account",
+    "entry": [
+      {
+        "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+        "changes": [
+          {
+            "value": {
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "15550001234",
+                "phone_number_id": "123456789"
+              },
+              "contacts": [
+                {
+                  "profile": { "name": "Test User" },
+                  "wa_id": "14155551234"
+                }
+              ],
+              "messages": [
+                {
+                  "from": "14155551234",
+                  "id": "wamid.test_voice_001",
+                  "timestamp": "1700000001",
+                  "type": "audio",
+                  "audio": {
+                    "id": "media_audio_001",
+                    "mime_type": "audio/ogg; codecs=opus",
+                    "voice": true
+                  }
+                }
+              ]
+            },
+            "field": "messages"
+          }
+        ]
+      }
+    ]
+  },
+  "status_update": {
+    "object": "whatsapp_business_account",
+    "entry": [
+      {
+        "id": "WHATSAPP_BUSINESS_ACCOUNT_ID",
+        "changes": [
+          {
+            "value": {
+              "messaging_product": "whatsapp",
+              "metadata": {
+                "display_phone_number": "15550001234",
+                "phone_number_id": "123456789"
+              },
+              "statuses": [
+                {
+                  "id": "wamid.test_text_001",
+                  "status": "delivered",
+                  "timestamp": "1700000005",
+                  "recipient_id": "14155551234"
+                }
+              ]
+            },
+            "field": "messages"
+          }
+        ]
+      }
+    ]
+  }
+}
